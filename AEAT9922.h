@@ -44,56 +44,123 @@ Registers and devices:
 0x3F - read position (10..18bit)
 */
 
-/*
- * Registers:
- * 00 00
- * 01 00
- * 02 00
- * 03 00
- * 04 00
- * 05 00
- * 06 00
- * 07 00
- * 08 80
- * 09 44
- * 0a 00
- * 0b 00
- * 10 00
- * 11 00
- * 21 a4
- * 22 00
- * 3f 7e 88
- */
+/*         | SPI-3 | SSI-3 | SSI-2 | SPI-4 | UVW | PWM 
+MSEL       |   0   |   0   |   0   |   1   |  1  |  1 
+M0         |   0   |   1   |   1   |  NCS  | ERR | ERR 
+M1         |  DIN  |  NSL  |   0   |  MOSI |  U  | n/a 
+M2         |  SCLK |  SCLK |  SCLK |  SCLK |  V  | n/a 
+M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM 
+*/
+
+// фізичний порт процесору - SPI
+// можно перевизначити у головному .ino файлі ПЕРЕД #include "AEAT9922.h"
+// другий варіант кастомізації - вказати ніжки при виклику setup_spi4(...)
+#ifdef ESP32
+  #ifndef _CS
+    #define _CS       5 // M0
+  #endif
+  #ifndef _MOSI
+    #define _MOSI    23 // M1
+  #endif
+  #ifndef _SCLK
+    #define _SCLK    13 // M2
+  #endif
+  #ifndef _MISO
+    #define _MISO    19 // M3
+  #endif
+  #ifndef _MSEL
+    #define _MSEL    26
+#else
+  #endif
+  #ifndef _CS
+    #define _CS      10 // M0
+  #endif
+  #ifndef _MOSI
+    #define _MOSI    11 // M1
+  #endif
+  #ifndef _SCLK
+    #define _SCLK    18 // M2
+  #endif
+  #ifndef _MOSI
+    #define _MOSI    12 // M3
+  #endif
+  #ifndef _MSEL
+    #define _MSEL     0 // NO MSEL
+  #endif
+#endif
+
+// Іменовані контакти енкодеру
+#define _M0 _CS
+#define _M1 _MOSI
+#define _M2 _SCLK
+#define _M3 _MISO
+
+// SPI-3 SSI-3 SSI-2
+#define _DIN    _M1
+#define _NSL    _M1
+#define _DO     _M3
+
+// режими роботи AEAT
+#define _AEAT_NONE 0
+#define _AEAT_SPI4 1
+#define _AEAT_SPI3 2
+#define _AEAT_SSI3 3
+#define _AEAT_SSI2 4
+
 
 class AEAT9922 {
 public:
 	AEAT9922();
 
-  uint16_t CS;
-  uint16_t SPI_MOSI;
-  uint16_t SPI_MISO;
-  uint16_t SPI_SCLK;
-  uint16_t MSEL;
-  
+  uint8_t M0   = _M0;
+  uint8_t M1   = _M1;
+  uint8_t M2   = _M2;
+  uint8_t M3   = _M3;
+  uint8_t CS   = _CS;
+  uint8_t MOSI = _MOSI;
+  uint8_t MISO = _MISO;
+  uint8_t SCLK = _SCLK;
+  uint8_t MSEL = _MSEL;
+  uint8_t NSL  = _NSL;
+  uint8_t DO   = _DO;
 	
 	#define READ  0x40 // read flag in command
 	#define WRITE 0x00 // write flag in command
 
 	unsigned int header;
-//	unsigned int angle;
-	
+	uint8_t mode = _AEAT_NONE;
 	unsigned int error_flag=0;
 	unsigned int error_parity=0; // читання з пристрою пройшло з битою парністю
 	unsigned int error_reg=0; 
 	unsigned long int pos=0; 
 	unsigned long int raw_data=0; 
-	
-  void setup(uint16_t CS_T, uint16_t SPI_MOSI_T, uint16_t SPI_MISO_T, uint16_t SPI_SCLK_T, uint16_t MSEL_T);
+
+  unsigned int rdy=0; // ready flag for ssi-3
+  unsigned int par=0; // parity for ssi-3
+  unsigned int mhi=0; // error "Magnet is too High" for ssi-3
+  unsigned int mlo=0; // error "Magnet is too Low"  for ssi-3
+
+
+
+/*         | SPI-3 | SSI-3 | SSI-2 | SPI-4 | UVW | PWM 
+MSEL       |   0   |   0   |   0   |   1   |  1  |  1 
+M0         |   0   |   1   |   1   |  NCS  | ERR | ERR 
+M1         |  DIN  |  NSL  |   0   |  MOSI |  U  | n/a 
+M2         |  SCLK |  SCLK |  SCLK |  SCLK |  V  | n/a 
+M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM 
+*/
+  void setup_spi4(){ return setup_spi4(M0, M1, M2, M3, MSEL); } // CS, MOSI, SCLK, MISO, MSEL
+  void setup_ssi3(){ return setup_ssi3(M0, M1, M2, M3, MSEL); } // ->1, NSL, SCLK, DO,   MSEL
+  void setup_spi4(uint8_t CS_T, uint8_t MOSI_T, uint8_t SCLK_T, uint8_t MISO_T, uint8_t MSEL_T);
+  void setup_ssi3(uint8_t M0_T, uint8_t NSL_T,  uint8_t SCLK_T, uint8_t DO_T,   uint8_t MSEL_T);
 	unsigned int parity(unsigned int n);
 	unsigned long int spi_transfer16(unsigned int reg, unsigned int RW);
 	unsigned long int spi_transfer24(unsigned int reg, unsigned int RW);
 	unsigned long int spi_read16(unsigned int reg);
 	unsigned long int spi_read24(unsigned int reg);
+  unsigned long int spi_write16(unsigned int reg, unsigned int data);
+  unsigned long int ssi_read(unsigned int bits);
+  unsigned long int ssi_read(){ return ssi_read(18); };
 	void print_registers();
 	
 //private:
