@@ -80,10 +80,32 @@ void loop() {
 //  }
 //  Serial.printf("0x3f 0x%05lx = %lld = %.3Lf deg.\n\n", data, data, double(data)*360.0/262144.0); // 2^18
 //  Serial.printf("0x%05lx = %lld = %.3Lf deg.\n", data, data, double(data)*360.0/262144.0); // 2^18
-  data = aeat.ssi_read(17);
-  Serial.printf("0x%05lx=%6lld=%7.3Lf | rdy=%d mhi=%d mlo=%d par=%d err=%d \n",
-                 data, data, double(data)*360.0/262144.0, // результат вже приведене до 18-бітного числа
+//  data = aeat.ssi_read(17);
+
+//  SPI.end();
+//  aeat.mode=0;
+  aeat.setup_spi4();
+  data = aeat.spi_read24(0x3f);
+  Serial.printf("SPI18 0x%05lx=%6lld=%7.3Lf |                   par=%d err=%d \n",
+                 data, data, double(data)*360.0/262144.0, // результат вже приведено до 18-бітного числа
+                                            aeat.par,aeat.error_parity);
+
+//  SPI.end();
+//  aeat.mode=0;
+  aeat.setup_ssi3();
+  data = aeat.ssi_read(16);
+  Serial.printf("SSI16 0x%05lx=%6lld=%7.3Lf | rdy=%d mhi=%d mlo=%d par=%d err=%d \n",
+                 data, data, double(data)*360.0/262144.0, // результат вже приведено до 18-бітного числа
                  aeat.rdy,aeat.mhi,aeat.mlo,aeat.par,aeat.error_parity);
+  data = aeat.ssi_read(17);
+  Serial.printf("SSI17 0x%05lx=%6lld=%7.3Lf | rdy=%d mhi=%d mlo=%d par=%d err=%d \n",
+                 data, data, double(data)*360.0/262144.0, // результат вже приведено до 18-бітного числа
+                 aeat.rdy,aeat.mhi,aeat.mlo,aeat.par,aeat.error_parity);
+  data = aeat.ssi_read(18);
+  Serial.printf("SSI18 0x%05lx=%6lld=%7.3Lf | rdy=%d mhi=%d mlo=%d par=%d err=%d \n",
+                 data, data, double(data)*360.0/262144.0, // результат вже приведено до 18-бітного числа
+                 aeat.rdy,aeat.mhi,aeat.mlo,aeat.par,aeat.error_parity);
+
 //  Serial.printf("0x%07lx = %lld=%.3Lf | rdy=%d mhi=%d mlo=%d par=%d err=%d \n",
 //                data, data, double(data)*360.0/262144.0,
 //                aeat.rdy, aeat.mhi, aeat.mlo, aeat.par, aeat.error_parity);

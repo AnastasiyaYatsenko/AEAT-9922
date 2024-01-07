@@ -20,12 +20,13 @@ void AEAT9922::setup_ssi3(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t D
   SCLK = SCLK_T;
   MSEL = MSEL_T;
   
+  SPI.end(); // Так треба після перемикання режимів! Інакше дані спотворюються
   if (MSEL != 0){
     pinMode(MSEL,  OUTPUT);
     digitalWrite(MSEL,  LOW); // -> not SPI4 mode
   }
 
-  if (mode!=_AEAT_SPI4 && mode!=_AEAT_SPI3 && mode!=_AEAT_SSI3 && mode!=_AEAT_SSI2) {
+//  if (mode!=_AEAT_SPI4 && mode!=_AEAT_SPI3 && mode!=_AEAT_SSI3 && mode!=_AEAT_SSI2) {
 //  pinMode(NSL,  OUTPUT);
 //  pinMode(SCLK, OUTPUT);
 //  pinMode(DO,   INPUT);
@@ -33,11 +34,12 @@ void AEAT9922::setup_ssi3(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t D
   // https://doc.arduino.ua/ru/prog/SPI
     SPI.setClockDivider(SPI_CLOCK_DIV16);
     SPI.setBitOrder(MSBFIRST);
-    SPI.setDataMode(SPI_MODE1); // CPOL=0, CPHA=1
+//    SPI.setDataMode(SPI_MODE1); // CPOL=0, CPHA=1
+    SPI.setDataMode(SPI_MODE1); // ??? не допомогло
     SPI.begin(); // внутрішня комутація зовнішніх пінів на mosi/miso/sck
-  }
+//  }
 
-  if (mode!=_AEAT_SSI3 && mode!=_AEAT_SSI2) {
+//  if (mode!=_AEAT_SSI3 && mode!=_AEAT_SSI2) {
     spiSSDisable(SPI.bus());
     spiDetachSS(SPI.bus(), M0); // комутуємо зовнішній пін на gpio
     pinMode(M0,   OUTPUT);
@@ -46,7 +48,7 @@ void AEAT9922::setup_ssi3(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t D
     spiDetachMOSI(SPI.bus(), NSL); // комутуємо зовнішній пін на gpio
     pinMode(NSL, OUTPUT);
     digitalWrite(NSL, HIGH);
-  }
+//  }
   mode = _AEAT_SSI3;
 }
 
@@ -57,21 +59,32 @@ void AEAT9922::setup_spi4(uint8_t M0_T, uint8_t M1_T, uint8_t M2_T, uint8_t M3_T
   MISO = M3_T;
   MSEL = MSEL_T;
   
-  pinMode(SCLK, OUTPUT);
-  pinMode(MOSI, OUTPUT);
-  pinMode(MISO,  INPUT);
-  pinMode(CS,   OUTPUT);
-  digitalWrite(CS, HIGH);
+//  pinMode(SCLK, OUTPUT);
+//  pinMode(MOSI, OUTPUT);
+//  pinMode(MISO,  INPUT);
+//  pinMode(CS,   OUTPUT);
+//  digitalWrite(CS, HIGH);
+  SPI.end(); // Так треба після перемикання режимів! Інакше дані спотворюються
   if (MSEL != 0){
     pinMode(MSEL,  OUTPUT);
     digitalWrite(MSEL,  HIGH); // -> SPI4 mode
   }
 
+//  if (mode !=_AEAT_SPI4 && mode!=_AEAT_SPI3 && mode!=_AEAT_SSI3 && mode!=_AEAT_SSI2) {
   // https://doc.arduino.ua/ru/prog/SPI
-  SPI.setClockDivider(SPI_CLOCK_DIV16);
-  SPI.setBitOrder(MSBFIRST);
-  SPI.setDataMode(SPI_MODE1); // CPOL=0, CPHA=1
-  SPI.begin();
+    SPI.setClockDivider(SPI_CLOCK_DIV16);
+    SPI.setBitOrder(MSBFIRST);
+    SPI.setDataMode(SPI_MODE1); // CPOL=0, CPHA=1
+    SPI.begin(); // 
+//  }
+/*
+  if (mode==_AEAT_SSI3) {
+    spiAttachSS(SPI.bus(), 0, CS); // комутуємо зовнішний пін на SPI.CS
+    spiSSEnable(SPI.bus());
+
+    spiAttachMOSI(SPI.bus(), MOSI); // комутуємо зовнішній пін на SPI.MOSI
+  }
+*/
   mode = _AEAT_SPI4;
 }
 
@@ -93,39 +106,50 @@ unsigned long int AEAT9922::spi_transfer16(unsigned int reg, unsigned int RW) {
     unsigned int low  = SPI.transfer(reg);
     delayMicroseconds(1);
     digitalWrite(CS, HIGH);
-    Serial.printf("Transfer: %02x %02x -> %02x %02x\n",header,reg,high,low);
+//    Serial.printf("Transfer: %02x %02x -> %02x %02x\n",header,reg,high,low);
     delayMicroseconds(1);
     return (high&0xff)<<8 | (low&0xff);
 }
 
+// void SPIClass::transferBits(uint32_t data, uint32_t * out, uint8_t bits);
+
 unsigned long int AEAT9922::ssi_read(unsigned int bits) {
+// у цьому режимі службові прапорці йдуть ЗА числом, тому для отримання коректних прапорців треба задавати реальну бітову точність 
     unsigned long long int res=0;
+    uint32_t buffer=0;
     if (mode != _AEAT_SSI3) {
         setup_ssi3();
     }
     digitalWrite(NSL, LOW);
     delayMicroseconds(1);
-    unsigned int high = SPI.transfer(0xff);
-    unsigned int mid  = SPI.transfer(0xff);
-    unsigned int low = 0;
-    if (bits>12) low  = SPI.transfer(0xff);
+//  виявилось, що esp32 може робити транзакції (кількість sclk) з довільним числом бітів <=32
+    SPI.transferBits(0xffffff, &buffer, bits+4); // 18 бітів позиції+4 службових
+//    uint8_t bytes=(bits+4+7)/8; // у скільки байт буде запакований результат, 2 або 3
+    raw_data = buffer >> (24-4-bits); // це така фіча - замовляємо 17..22 біти, а повертається число у 24х бітах, "знизу" доклеєне нулями. Їх потрібно відсікти
+//    unsigned int high = SPI.transfer(0xff); // стара версія з побайтовим вичитуванням
+//    unsigned int mid  = SPI.transfer(0xff);
+//    unsigned int low = 0;
+//    if (bits>12) low  = SPI.transfer(0xff);
     delayMicroseconds(1);
     digitalWrite(NSL, HIGH);
     delayMicroseconds(1);
-//    Serial.printf("%02x:%02x:%02x :: ",high,mid,low);
-    raw_data = (high&0xff)<<16 | (mid&0xff)<<8 | (low&0xff); // raw_data is 24 bits despite of precision
+//    Serial.printf("%08lx :: \n",buffer);
+//    raw_data = (high&0xff)<<16 | (mid&0xff)<<8 | (low&0xff); // raw_data is 24 bits despite of precision
 
-    res = raw_data>>(24-4-bits);
     
-    error_parity = parity(res); // рахуємо парність разом з переданим бітом парності, результат повинен бути тотожно дорівнювати нулю. Якщо одиниця - значить був збій парності
-    par = res&1;
-    mlo = (res&2)>>1;
-    mhi = (res&4)>>2;
-    rdy = (res&8)>>3;
-    res = res>>4;
-// для зручності наступних розрахунків приводимо результат до 18-бітного числа, незалежно від реальної точності датчику
-    if (bits<18) 
-      res = res<<(18-bits);
+    error_parity = parity(raw_data); // рахуємо парність разом з переданим бітом парності, результат повинен тотожно дорівнювати нулю. Якщо одиниця - значить був збій парності.
+    par = raw_data&1;
+    mlo = (raw_data&2)>>1;
+    mhi = (raw_data&4)>>2;
+    rdy = (raw_data&8)>>3;
+    res = raw_data>>4;
+// для зручності подальших розрахунків приводимо результат до 18-бітового числа, незалежно від реальної точності датчика
+    if (bits<17) // це все тому, що ми не можемо прочитати найстарший біт :(
+      res = res<<(17-bits);
+    else if (bits==18)
+      res = res>>1;
+//    if (bits<18) 
+//      res = res<<(18-bits);
     return res;
 }
 
@@ -139,7 +163,9 @@ unsigned long int AEAT9922::spi_transfer24(unsigned int reg, unsigned int RW) {
     delayMicroseconds(1);
     digitalWrite(CS, HIGH);
     delayMicroseconds(1);
+//    Serial.printf("%02x%02x%02x :: ",high,mid,low);
     return (high&0xff)<<16 | (mid&0xff)<<8 | (low&0xff);
+
 }
 
 // Уся бітова еквілібристика тут - 16-бітна!
@@ -163,22 +189,24 @@ unsigned long int AEAT9922::spi_read16(unsigned int reg) {
 unsigned long int AEAT9922::spi_read24(unsigned int reg) {
   if (mode != _AEAT_SPI4) {
      setup_spi4();
+     delayMicroseconds(1);
   }
 // запит 16-бітний
   spi_transfer16(reg,READ); // Робимо запит по регістру reg, результат попереднього входу ігноруємо
 // відповідь 24-бітна 
   raw_data = spi_transfer24(0x3f,READ); // сире читання, тут дані + прапор помилок + парність
-  unsigned int read_parity = raw_data&0x800000?1:0; // відокремлюємо біт парності
+  par = raw_data&0x800000?1:0; // відокремлюємо біт парності
   error_flag = raw_data&0x400000?1:0; // відокремлюємо біт прапору помилок
-  if (parity(raw_data&0x7fffff) == read_parity) error_parity = 0;
+  if (parity(raw_data&0x7fffff) == par) error_parity = 0;
   else error_parity = 1;
   return (raw_data&0x3fffff)>>4; // обрізаємо верхні 2 біти і зміщуємо на 4 біта вниз, отримуємо 24-2-4=18 біт розрядності
 }
 
 // НЕ ПРАЦЮЄ!
 unsigned long int AEAT9922::spi_write16(unsigned int reg, unsigned int data) {
-  spi_transfer16(reg,WRITE); // Робимо запит по регістру reg, результат попереднього входу ігноруємо
-  raw_data = spi_transfer16(data,WRITE);
+  spi_transfer16(reg,WRITE); // Хочемо записати дані у регістр reg
+  raw_data = spi_transfer16(data,WRITE); // це дані для запису
+// це неактуально, оскільки запис все одно поки що не працює 
   unsigned int read_parity = raw_data&0x8000?1:0; // відокремлюємо біт парності
   // прописуємо глобальні змінні для контролю помилок
   error_flag = raw_data&0x4000?1:0; // відокремлюємо біт прапору помилок
