@@ -29,7 +29,7 @@ void AEAT9922::setup_ssi3(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t D
 //  if (mode!=_AEAT_SPI4 && mode!=_AEAT_SPI3 && mode!=_AEAT_SSI3 && mode!=_AEAT_SSI2) {
 //  pinMode(NSL,  OUTPUT);
 //  pinMode(SCLK, OUTPUT);
-//  pinMode(DO,   INPUT);
+  pinMode(DO,   INPUT);
 
   // https://doc.arduino.ua/ru/prog/SPI
     SPI.setClockDivider(SPI_CLOCK_DIV16);
@@ -59,11 +59,6 @@ void AEAT9922::setup_spi4(uint8_t M0_T, uint8_t M1_T, uint8_t M2_T, uint8_t M3_T
   MISO = M3_T;
   MSEL = MSEL_T;
   
-//  pinMode(SCLK, OUTPUT);
-//  pinMode(MOSI, OUTPUT);
-//  pinMode(MISO,  INPUT);
-//  pinMode(CS,   OUTPUT);
-//  digitalWrite(CS, HIGH);
   SPI.end(); // Так треба після перемикання режимів! Інакше дані спотворюються
   if (MSEL != 0){
     pinMode(MSEL,  OUTPUT);
@@ -122,9 +117,15 @@ unsigned long int AEAT9922::ssi_read(unsigned int bits) {
     }
     digitalWrite(NSL, LOW);
     delayMicroseconds(1);
+    //read the first bit
+    spiDetachMISO(SPI.bus(), MISO);
+    uint8_t msb = digitalRead(MISO);
+    spiAttachMISO(SPI.bus(), MISO);
+    delayMicroseconds(1);
 //  виявилось, що esp32 може робити транзакції (кількість sclk) з довільним числом бітів <=32
     SPI.transferBits(0xffffff, &buffer, bits+4); // 18 бітів позиції+4 службових
 //    uint8_t bytes=(bits+4+7)/8; // у скільки байт буде запакований результат, 2 або 3
+    buffer = (msb<<24)|buffer;
     raw_data = buffer >> (24-4-bits); // це така фіча - замовляємо 17..22 біти, а повертається число у 24х бітах, "знизу" доклеєне нулями. Їх потрібно відсікти
 //    unsigned int high = SPI.transfer(0xff); // стара версія з побайтовим вичитуванням
 //    unsigned int mid  = SPI.transfer(0xff);
@@ -148,6 +149,7 @@ unsigned long int AEAT9922::ssi_read(unsigned int bits) {
       res = res<<(17-bits);
     else if (bits==18)
       res = res>>1;
+//      res = msb<<17|res;
 //    if (bits<18) 
 //      res = res<<(18-bits);
     return res;
