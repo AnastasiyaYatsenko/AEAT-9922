@@ -55,6 +55,7 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
 // фізичний порт процесору - SPI
 // можно перевизначити у головному .ino файлі ПЕРЕД #include "AEAT9922.h"
 // другий варіант кастомізації - вказати ніжки при виклику setup_spi4(...)
+/*
 #ifdef ESP32
   #ifndef _CS
     #define _CS       5 // M0
@@ -63,15 +64,15 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
     #define _MOSI    23 // M1
   #endif
   #ifndef _SCLK
-    #define _SCLK    13 // M2
+    #define _SCLK    18 // M2
   #endif
   #ifndef _MISO
     #define _MISO    19 // M3
   #endif
   #ifndef _MSEL
     #define _MSEL    26
-#else
   #endif
+#else
   #ifndef _CS
     #define _CS      10 // M0
   #endif
@@ -79,7 +80,7 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
     #define _MOSI    11 // M1
   #endif
   #ifndef _SCLK
-    #define _SCLK    18 // M2
+    #define _SCLK    13 // M2
   #endif
   #ifndef _MOSI
     #define _MOSI    12 // M3
@@ -88,7 +89,16 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
     #define _MSEL     0 // NO MSEL
   #endif
 #endif
-
+*/
+#define _CS       5 // M0
+#define _MOSI    23 // M1
+#define _SCLK    18 // M2
+#define _MISO    19 // M3
+#define _MSEL    26
+//MOSI: 23
+//MISO: 19
+//SCK: 18
+//SS: 5
 // Іменовані контакти енкодеру
 #define _M0 _CS
 #define _M1 _MOSI
@@ -110,7 +120,16 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
 
 class AEAT9922 {
 public:
-	AEAT9922();
+  AEAT9922();
+  unsigned long int read_enc(unsigned int bits);
+  void init(){init_pin_ssi();};
+
+  unsigned int get_rdy() {return rdy;};
+  unsigned int get_par() {return par;};
+  unsigned int get_mhi() {return mhi;};
+  unsigned int get_mlo() {return mlo;};
+
+private:
 
   uint8_t M0   = _M0;
   uint8_t M1   = _M1;
@@ -123,17 +142,17 @@ public:
   uint8_t MSEL = _MSEL;
   uint8_t NSL  = _NSL;
   uint8_t DO   = _DO;
-	
-	#define READ  0x40 // read flag in command
-	#define WRITE 0x00 // write flag in command
+  
+  #define READ  0x40 // read flag in command
+  #define WRITE 0x00 // write flag in command
 
-	unsigned int header;
-	uint8_t mode = _AEAT_NONE;
-	unsigned int error_flag=0;
-	unsigned int error_parity=0; // читання з пристрою пройшло з битою парністю
-	unsigned int error_reg=0; 
-	unsigned long int pos=0; 
-	unsigned long int raw_data=0; 
+  unsigned int header;
+  uint8_t mode = _AEAT_NONE;
+  unsigned int error_flag=0;
+  unsigned int error_parity=0; // читання з пристрою пройшло з битою парністю
+  unsigned int error_reg=0; 
+  unsigned long int pos=0; 
+  unsigned long int raw_data=0; 
 
   unsigned int rdy=0; // ready flag for ssi-3
   unsigned int par=0; // parity for ssi-3
@@ -153,16 +172,22 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
   void setup_ssi3(){ return setup_ssi3(M0, M1, M2, M3, MSEL); } // ->1, NSL, SCLK, DO,   MSEL
   void setup_spi4(uint8_t CS_T, uint8_t MOSI_T, uint8_t SCLK_T, uint8_t MISO_T, uint8_t MSEL_T);
   void setup_ssi3(uint8_t M0_T, uint8_t NSL_T,  uint8_t SCLK_T, uint8_t DO_T,   uint8_t MSEL_T);
-	unsigned int parity(unsigned int n);
-	unsigned long int spi_transfer16(unsigned int reg, unsigned int RW);
-	unsigned long int spi_transfer24(unsigned int reg, unsigned int RW);
-	unsigned long int spi_read16(unsigned int reg);
-	unsigned long int spi_read24(unsigned int reg);
+  unsigned int parity(unsigned int n);
+  unsigned long int spi_transfer16(unsigned int reg, unsigned int RW);
+  unsigned long int spi_transfer24(unsigned int reg, unsigned int RW);
+  unsigned long int spi_read16(unsigned int reg);
+  unsigned long int spi_read24(unsigned int reg);
   unsigned long int spi_write16(unsigned int reg, unsigned int data);
   unsigned long int ssi_read(unsigned int bits);
   unsigned long int ssi_read(){ return ssi_read(18); };
-	void print_registers();
-	
+  void print_registers();
+
+  
+
+  void init_pin_ssi(){ return init_pin_ssi(M0, M1, M2, M3, MSEL); }
+  void init_pin_ssi(uint8_t M0_T, uint8_t NSL_T,  uint8_t SCLK_T, uint8_t DO_T,   uint8_t MSEL_T);
+  unsigned long int ssi_read_pins(unsigned int bits);
+  
 //private:
 };
 #endif
