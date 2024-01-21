@@ -121,7 +121,15 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
 class AEAT9922 {
 public:
   AEAT9922();
+  unsigned long int read_enc(unsigned int bits);
   void init(){init_pin_ssi();};
+
+  unsigned int get_rdy() {return rdy;};
+  unsigned int get_par() {return par;};
+  unsigned int get_mhi() {return mhi;};
+  unsigned int get_mlo() {return mlo;};
+
+private:
 
   uint8_t M0   = _M0;
   uint8_t M1   = _M1;
@@ -167,13 +175,12 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
   unsigned int parity(unsigned int n);
   unsigned long int spi_transfer16(unsigned int reg, unsigned int RW);
   unsigned long int spi_transfer24(unsigned int reg, unsigned int RW);
-  unsigned long int spi_read(unsigned int reg);
-//  unsigned long int spi_read24(unsigned int reg);
-  unsigned long int spi_write(unsigned int reg, unsigned int data);
+  unsigned long int spi_read16(unsigned int reg);
+  unsigned long int spi_read24(unsigned int reg);
+  unsigned long int spi_write16(unsigned int reg, unsigned int data);
   unsigned long int ssi_read(unsigned int bits);
   unsigned long int ssi_read(){ return ssi_read(18); };
   void print_registers();
-  void print_position();
 
   
 
