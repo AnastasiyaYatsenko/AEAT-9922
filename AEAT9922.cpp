@@ -4,6 +4,7 @@
 
 
 AEAT9922::AEAT9922(){
+//  mode = _AEAT_NONE;
 //  CS   = M0 = default_M0;
 //  MOSI = M1 = default_M1;
 //  SCLK = M2 = default_M2;
@@ -11,10 +12,6 @@ AEAT9922::AEAT9922(){
 //  MSEL = default_MSEL;
 //  NSL  = default_M1;
 //  DO   = default_M3;
-}
-
-unsigned long int AEAT9922::read_enc(unsigned int bits){
-  return ssi_read_pins(bits);
 }
 
 void AEAT9922::setup_ssi3(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t DO_T, uint8_t MSEL_T) {
@@ -55,6 +52,51 @@ void AEAT9922::setup_ssi3(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t D
     digitalWrite(NSL, HIGH);
 //  }
   mode = _AEAT_SSI3;
+}
+
+unsigned long int AEAT9922::ssi_read(unsigned int bits) {
+// у цьому режимі службові прапорці йдуть ЗА числом, тому для отримання коректних прапорців треба задавати реальну бітову точність 
+    unsigned long long int res=0;
+    uint32_t buffer=0;
+    if (mode != _AEAT_SSI3) setup_ssi3();
+    digitalWrite(NSL, LOW);
+    delayMicroseconds(1);
+    //read the first bit
+//    spiDetachMISO(SPI.bus(), MISO);
+    uint8_t msb = digitalRead(MISO);
+//    spiAttachMISO(SPI.bus(), MISO);
+    delayMicroseconds(1);
+//  виявилось, що esp32 може робити транзакції (кількість sclk) з довільним числом бітів <=32
+    SPI.transferBits(0xffffff, &buffer, bits+4); // 18 бітів позиції+4 службових
+//    uint8_t bytes=(bits+4+7)/8; // у скільки байт буде запакований результат, 2 або 3
+    buffer = (msb<<24)|buffer;
+    raw_data = buffer >> (24-4-bits); // це така фіча - замовляємо 17..22 біти, а повертається число у 24х бітах, "знизу" доклеєне нулями. Їх потрібно відсікти
+//    unsigned int high = SPI.transfer(0xff); // стара версія з побайтовим вичитуванням
+//    unsigned int mid  = SPI.transfer(0xff);
+//    unsigned int low = 0;
+//    if (bits>12) low  = SPI.transfer(0xff);
+    delayMicroseconds(1);
+    digitalWrite(NSL, HIGH);
+    delayMicroseconds(1);
+//    Serial.printf("%08lx :: \n",buffer);
+//    raw_data = (high&0xff)<<16 | (mid&0xff)<<8 | (low&0xff); // raw_data is 24 bits despite of precision
+
+    
+    error_parity = parity(raw_data); // рахуємо парність разом з переданим бітом парності, результат повинен тотожно дорівнювати нулю. Якщо одиниця - значить був збій парності.
+    par = raw_data&1;
+    mlo = (raw_data&2)>>1;
+    mhi = (raw_data&4)>>2;
+    rdy = (raw_data&8)>>3;
+    res = raw_data>>4;
+// для зручності подальших розрахунків приводимо результат до 18-бітового числа, незалежно від реальної точності датчика
+    if (bits<17) // це все тому, що ми не можемо прочитати найстарший біт :(
+      res = res<<(17-bits);
+    else if (bits==18)
+      res = res>>1;
+//      res = msb<<17|res;
+//    if (bits<18) 
+//      res = res<<(18-bits);
+    return res;
 }
 
 void AEAT9922::setup_spi4(uint8_t M0_T, uint8_t M1_T, uint8_t M2_T, uint8_t M3_T, uint8_t MSEL_T) {
@@ -110,58 +152,8 @@ unsigned long int AEAT9922::spi_transfer16(unsigned int reg, unsigned int RW) {
     unsigned int low  = SPI.transfer(reg);
     delayMicroseconds(1);
     digitalWrite(CS, HIGH);
-//    Serial.printf("Transfer: %02x %02x -> %02x %02x\n",header,reg,high,low);
     delayMicroseconds(1);
     return (high&0xff)<<8 | (low&0xff);
-}
-
-// void SPIClass::transferBits(uint32_t data, uint32_t * out, uint8_t bits);
-
-unsigned long int AEAT9922::ssi_read(unsigned int bits) {
-// у цьому режимі службові прапорці йдуть ЗА числом, тому для отримання коректних прапорців треба задавати реальну бітову точність 
-    unsigned long long int res=0;
-    uint32_t buffer=0;
-    if (mode != _AEAT_SSI3) {
-        setup_ssi3();
-    }
-    digitalWrite(NSL, LOW);
-    delayMicroseconds(1);
-    //read the first bit
-//    spiDetachMISO(SPI.bus(), MISO);
-    uint8_t msb = digitalRead(MISO);
-//    spiAttachMISO(SPI.bus(), MISO);
-    delayMicroseconds(1);
-//  виявилось, що esp32 може робити транзакції (кількість sclk) з довільним числом бітів <=32
-    SPI.transferBits(0xffffff, &buffer, bits+4); // 18 бітів позиції+4 службових
-//    uint8_t bytes=(bits+4+7)/8; // у скільки байт буде запакований результат, 2 або 3
-    buffer = (msb<<24)|buffer;
-    raw_data = buffer >> (24-4-bits); // це така фіча - замовляємо 17..22 біти, а повертається число у 24х бітах, "знизу" доклеєне нулями. Їх потрібно відсікти
-//    unsigned int high = SPI.transfer(0xff); // стара версія з побайтовим вичитуванням
-//    unsigned int mid  = SPI.transfer(0xff);
-//    unsigned int low = 0;
-//    if (bits>12) low  = SPI.transfer(0xff);
-    delayMicroseconds(1);
-    digitalWrite(NSL, HIGH);
-    delayMicroseconds(1);
-//    Serial.printf("%08lx :: \n",buffer);
-//    raw_data = (high&0xff)<<16 | (mid&0xff)<<8 | (low&0xff); // raw_data is 24 bits despite of precision
-
-    
-    error_parity = parity(raw_data); // рахуємо парність разом з переданим бітом парності, результат повинен тотожно дорівнювати нулю. Якщо одиниця - значить був збій парності.
-    par = raw_data&1;
-    mlo = (raw_data&2)>>1;
-    mhi = (raw_data&4)>>2;
-    rdy = (raw_data&8)>>3;
-    res = raw_data>>4;
-// для зручності подальших розрахунків приводимо результат до 18-бітового числа, незалежно від реальної точності датчика
-    if (bits<17) // це все тому, що ми не можемо прочитати найстарший біт :(
-      res = res<<(17-bits);
-    else if (bits==18)
-      res = res>>1;
-//      res = msb<<17|res;
-//    if (bits<18) 
-//      res = res<<(18-bits);
-    return res;
 }
 
 unsigned long int AEAT9922::spi_transfer24(unsigned int reg, unsigned int RW) {
@@ -170,97 +162,145 @@ unsigned long int AEAT9922::spi_transfer24(unsigned int reg, unsigned int RW) {
     delayMicroseconds(1);
     unsigned long int high = SPI.transfer(header);
     unsigned long int mid  = SPI.transfer(reg);
-    unsigned long int low  = SPI.transfer(header); //
+    unsigned long int low  = SPI.transfer(header);
     delayMicroseconds(1);
     digitalWrite(CS, HIGH);
     delayMicroseconds(1);
-//    Serial.printf("%02x%02x%02x :: ",high,mid,low);
     return (high&0xff)<<16 | (mid&0xff)<<8 | (low&0xff);
 
 }
 
-// Уся бітова еквілібристика тут - 16-бітна!
-unsigned long int AEAT9922::spi_read16(unsigned int reg) {
-  if (mode != _AEAT_SPI4) {
-     setup_spi4();
-  }
+unsigned long int AEAT9922::spi_read(unsigned int reg) {
+  unsigned long int data=0; 
+  if (mode != _AEAT_SPI4) setup_spi4();
   spi_transfer16(reg,READ); // Робимо запит по регістру reg, результат попереднього входу ігноруємо
-  raw_data = spi_transfer16(0x3f,READ); // сире читання, тут дані + прапор помилок + парність
-  unsigned int read_parity = raw_data&0x8000?1:0; // відокремлюємо біт парності
-  // прописуємо глобальні змінні для контролю помилок
-  error_flag = raw_data&0x4000?1:0; // відокремлюємо біт прапору помилок
-  // підраховуємо парність прийнятих даних (за винятком самого біту парності) і порівнюємо з отриманим бітом парності
-  if (parity(raw_data&0x7fff) == read_parity) error_parity = 0;
-  else error_parity = 1;
+
+  if (reg != 0x3f) { // єдиний регістр, який потребує 24-бітне читання
+    raw_data = spi_transfer16(0x3f,READ); // сире читання, тут дані + прапор помилок + парність
+    error_flag = raw_data&0x4000?1:0; // зберігаємо біт прапору помилок глобально
+    // підраховуємо парність прийнятих даних включно з бітом парності і зберігаємо глобально
+    error_parity = parity(raw_data); // зберігаємо біт прапору помилок глобально
+    data = raw_data&0x3fff;
+
+  } else {
+    // відповідь 24-бітна 
+    raw_data = spi_transfer24(0x3f,READ); // сире читання, тут дані + прапор помилок + парність
+    error_flag = raw_data&0x400000?1:0; // відокремлюємо біт прапору помилок
+    error_parity = parity(raw_data);
+    data = (raw_data&0x3fffff)>>4; // обрізаємо верхні 2 біти і зміщуємо на 4 біта вниз, отримуємо 24-2-4=18 біт розрядності
+  }
+
   if (error_parity != 0) {Serial.print("Parity error!\n");}
   if (error_flag != 0) {Serial.print("Error flag\n");}
-  return raw_data&0x3fff;
+  
+  return data;
 }
 
-unsigned long int AEAT9922::spi_read24(unsigned int reg) {
-  if (mode != _AEAT_SPI4) {
-     setup_spi4();
-     delayMicroseconds(1);
-  }
-// запит 16-бітний
-  spi_transfer16(reg,READ); // Робимо запит по регістру reg, результат попереднього входу ігноруємо
-// відповідь 24-бітна 
-  raw_data = spi_transfer24(0x3f,READ); // сире читання, тут дані + прапор помилок + парність
-  par = raw_data&0x800000?1:0; // відокремлюємо біт парності
-  error_flag = raw_data&0x400000?1:0; // відокремлюємо біт прапору помилок
-  if (parity(raw_data&0x7fffff) == par) error_parity = 0;
-  else error_parity = 1;
-  return (raw_data&0x3fffff)>>4; // обрізаємо верхні 2 біти і зміщуємо на 4 біта вниз, отримуємо 24-2-4=18 біт розрядності
-}
+unsigned long int AEAT9922::spi_write(unsigned int reg, unsigned int data) {
+  if (mode != _AEAT_SPI4) setup_spi4();
+  spi_transfer16(0x10,WRITE); // UNLOCK write
+  spi_transfer16(0xAB,WRITE);
 
-// НЕ ПРАЦЮЄ!
-unsigned long int AEAT9922::spi_write16(unsigned int reg, unsigned int data) {
   spi_transfer16(reg,WRITE); // Хочемо записати дані у регістр reg
   raw_data = spi_transfer16(data,WRITE); // це дані для запису
-// це неактуально, оскільки запис все одно поки що не працює 
-  unsigned int read_parity = raw_data&0x8000?1:0; // відокремлюємо біт парності
-  // прописуємо глобальні змінні для контролю помилок
-  error_flag = raw_data&0x4000?1:0; // відокремлюємо біт прапору помилок
-  // підраховуємо парність прийнятих даних (за винятком самого біту парності) і порівнюємо з отриманим бітом парності
-  if (parity(raw_data&0x7fff) == read_parity) error_parity = 0;
-  else error_parity = 1;
-  if (error_parity != 0) {Serial.print("Parity error!\n");}
-  if (error_flag != 0) {Serial.print("Error flag\n");}
+
+  spi_transfer16(0x10,WRITE); // LOCK write
+  spi_transfer16(0x00,WRITE);
+
+  error_parity = parity(raw_data); // рахуємо parity разом з отриманим бітом парності, воно ПОВИННО дорівнювати нулю, інакше це і є збій контроля парності
   return raw_data&0x3fff;
 }
 
+void AEAT9922::write_hysteresis(uint8_t data) {
+  reg8.bits = spi_read(8);
+  reg8.hyst = data;
+  spi_write(8, reg8.bits);
+}
+
+void AEAT9922::write_direction(uint8_t data) {
+  reg8.bits = spi_read(8);
+  reg8.dir = data;
+  spi_write(8, reg8.bits);
+}
+
+void AEAT9922::write_resolution(uint8_t data) {
+  reg8.bits = spi_read(8);
+  reg8.res = data;
+  spi_write(8, reg8.bits);
+}
+
+void AEAT9922::print_register(unsigned int reg) {
+  unsigned long int data;
+  switch(reg){
+    case 0x07:
+      data = spi_read(0x07);
+      Serial.printf("0x07:0x%04lx\n    [7]    HW ST Zero=%d\n    [6]    HW Accuracy Calibr=%d\n    [5]    Axis Mode=%d\n    [3:2]  I-Width=%d\n    [1:0]  I-Phase=%d\n",
+                                      data, data&0x80?1:0,   data&0x40?1:0,           data&0x20?1:0,  (data&0x0c)>>2,   data&0x03); 
+      break;
+    case 0x08:
+      data = spi_read(0x08);
+      Serial.printf("0x08:0x%04lx\n    [7:5]  Hysteresis=0x%lx (%.2f mech. degree)\n    [4]    Direction=%d\n    [3:0]  Abs Resolution(SPI/SSI)=0x%x (%d-bits)\n",
+                            data,
+                            (data&0xe0)>>5, float((data&0xe0)>>5)/100, data&0x10?1:0,  data&0x0f,  18-(data&0x0f));
+      break;
+    case 0x09:
+    case 0x0a:
+      data = (spi_read(0x09))<<8 | spi_read(0x0a)&0xff;
+      Serial.printf("0x09-0x0A: 0x%04lx\n    [13:0] Incr Resolution=%ld CPR\n", data, data);
+      break;
+    case 0x0b:
+      data = spi_read(0x0b);
+      Serial.printf("0x0B:\n    [6:5]  PSEL=%d%d\n    [4:0]  UWV/PWM=%02x\n",
+                            data&0x40?1:0, data&0x20?1:0,  data&0x1f);
+      break;
+    case 0x0c:
+    case 0x0d:
+    case 0x0e:
+      data = (spi_read(0x0c)&0x0000ff)<<10 | (spi_read(0x0d)&0x0000ff)<<2 | (spi_read(0x0e)&0x00000c)>>6;
+      Serial.printf("0x0C-0x0E:\n    [24:6] Single-Turn Zero Reset=0x%05lx\n",
+                            data&0x80?1:0, data&0x40?1:0,  data&0x20?1:0, data&0x10?1:0);
+      break;
+    case 0x21:
+      data = spi_read(0x21);
+      Serial.printf("0x21 Error bits register:\n    [7]    RDY=%d\n    [6]    MHI=%d\n    [5]    MLO=%d\n    [4]    MEM_Err=%d\n",
+                            data&0x80?1:0, data&0x40?1:0,  data&0x20?1:0, data&0x10?1:0);
+      break;
+    case 0x3f:
+      data = spi_read(0x3f);
+      Serial.printf("0x3F :\n    [17:0]  Current position = 0x%05x = %d = %.3f deg.\n\n", data, data, double(data*360)/double(262144));
+  }
+}
 
 void AEAT9922::print_registers() {
-  unsigned long long int data;
+  unsigned long int data;
   Serial.print("\nRegisters:\n");
-  data = spi_read16(0x07);
-  Serial.printf("0x07:\n    [7]    HW ST Zero=%d\n    [6]    HW Accuracy Calibr=%d\n    [5]    Axis Mode=%d\n    [3:2]  I-Width=%d\n    [1:0]  I-Phase=%d\n",
-                          data&0x80?1:0,   data&0x40?1:0,           data&0x20?1:0,  data&0x0c>>2,   data&0x03);  
+  data = spi_read(0x07);
+  Serial.printf("0x07:0x%04lx\n    [7]    HW ST Zero=%d\n    [6]    HW Accuracy Calibr=%d\n    [5]    Axis Mode=%d\n    [3:2]  I-Width=%d\n    [1:0]  I-Phase=%d\n",
+                          data, data&0x80?1:0,   data&0x40?1:0,           data&0x20?1:0,  (data&0x0c)>>2,   data&0x03);  
 
-  data = spi_read16(0x08);
+  data = spi_read(0x08);
   Serial.printf("0x08:0x%04lx\n    [7:5]  Hysteresis=0x%x (%.2f mech. degree)\n    [4]    Direction=%d\n    [3:0]  Abs Resolution(SPI/SSI)=0x%x (%d-bits)\n",
                           data,
-                          data&0xe0>>5, float(data&0xe0>>5)/100, data&0x10?1:0,  data&0x0f,  18-(data&0x0f));
+                          (data&0xe0)>>5, float((data&0xe0)>>5)/100, data&0x10?1:0,  data&0x0f,  18-(data&0x0f));
 
-//  data = (spi_read16(0x09)&0x3f)<<8 | spi_read16(0x0a)&0xff;
-  data = (spi_read16(0x09))<<8 | spi_read16(0x0a)&0xff;
+  data = (spi_read(0x09))<<8 | spi_read(0x0a)&0xff;
   Serial.printf("0x09-0x0A: 0x%04lx\n    [13:0] Incr Resolution=%ld CPR\n",
                           data, data);
 
-  data = spi_read16(0x0b);
+  data = spi_read(0x0b);
   Serial.printf("0x0B:\n    [6:5]  PSEL=%d%d\n    [4:0]  UWV/PWM=%02x\n",
                           data&0x40?1:0, data&0x20?1:0,  data&0x1f);
 
-  data = (spi_read16(0x0c)&0x0000ff)<<10 | (spi_read16(0x0d)&0x0000ff)<<2 | (spi_read16(0x0e)&0x00000c)>>6;
+  data = (spi_read(0x0c)&0x0000ff)<<10 | (spi_read(0x0d)&0x0000ff)<<2 | (spi_read(0x0e)&0x00000c)>>6;
   Serial.printf("0x0C-0x0E:\n    [24:6] Single-Turn Zero Reset=0x%05lx\n",
                           data&0x80?1:0, data&0x40?1:0,  data&0x20?1:0, data&0x10?1:0);
 
-  data = spi_read16(0x21);
+  data = spi_read(0x21);
   Serial.printf("0x21 Error bits register:\n    [7]    RDY=%d\n    [6]    MHI=%d\n    [5]    MLO=%d\n    [4]    MEM_Err=%d\n",
                           data&0x80?1:0, data&0x40?1:0,  data&0x20?1:0, data&0x10?1:0);
 
-  data = spi_read24(0x3f);
-  Serial.printf("0x3F :\n    [17:0]  Current position = 0x%05lx = %ld = %.3lf deg.\n\n", data, data, double(data*360)/double(262144)); 
+  data = spi_read(0x3f);
+  Serial.printf("0x3F :\n    [17:0]  Current position = 0x%05x = %d = %.3f deg.\n\n", data, data, double(data*360)/double(262144)); 
 }
 
 void AEAT9922::init_pin_ssi(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t DO_T, uint8_t MSEL_T) {
@@ -292,13 +332,14 @@ void AEAT9922::init_pin_ssi(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t
 }
 
 unsigned long int AEAT9922::ssi_read_pins(unsigned int bits) {
+  if (mode != _AEAT_SSI3) init_pin_ssi();
 // у цьому режимі службові прапорці йдуть ЗА числом, тому для отримання коректних прапорців треба задавати реальну бітову точність 
     unsigned long long int res=0;
     uint32_t buffer=0;
     digitalWrite(NSL, LOW);
     delayMicroseconds(1);
     
-//    buffer = digitalRead(DO) & 0x01; // не треба!!/
+//    buffer = digitalRead(DO) & 0x01; // не треба!!
 //    delayMicroseconds(1);
 
 //  виявилось, що esp32 може робити транзакції (кількість sclk) з довільним числом бітів <=32

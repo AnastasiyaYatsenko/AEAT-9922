@@ -117,19 +117,10 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
 #define _AEAT_SSI3 3
 #define _AEAT_SSI2 4
 
-
 class AEAT9922 {
 public:
   AEAT9922();
-  unsigned long int read_enc(unsigned int bits);
   void init(){init_pin_ssi();};
-
-  unsigned int get_rdy() {return rdy;};
-  unsigned int get_par() {return par;};
-  unsigned int get_mhi() {return mhi;};
-  unsigned int get_mlo() {return mlo;};
-
-private:
 
   uint8_t M0   = _M0;
   uint8_t M1   = _M1;
@@ -145,6 +136,17 @@ private:
   
   #define READ  0x40 // read flag in command
   #define WRITE 0x00 // write flag in command
+
+  union Reg8Config {
+    struct {
+      uint8_t res :4;
+      uint8_t dir :1;
+      uint8_t hyst :3;
+    };
+    uint8_t bits;
+  };
+
+  Reg8Config reg8;
 
   unsigned int header;
   uint8_t mode = _AEAT_NONE;
@@ -175,12 +177,17 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
   unsigned int parity(unsigned int n);
   unsigned long int spi_transfer16(unsigned int reg, unsigned int RW);
   unsigned long int spi_transfer24(unsigned int reg, unsigned int RW);
-  unsigned long int spi_read16(unsigned int reg);
-  unsigned long int spi_read24(unsigned int reg);
-  unsigned long int spi_write16(unsigned int reg, unsigned int data);
+  unsigned long int spi_read(unsigned int reg);
+//  unsigned long int spi_read24(unsigned int reg);
+  unsigned long int spi_write(unsigned int reg, unsigned int data);
   unsigned long int ssi_read(unsigned int bits);
   unsigned long int ssi_read(){ return ssi_read(18); };
   void print_registers();
+  void print_register(unsigned int reg);
+
+  void write_hysteresis(uint8_t data);
+  void write_direction(uint8_t data);
+  void write_resolution(uint8_t data);
 
   
 

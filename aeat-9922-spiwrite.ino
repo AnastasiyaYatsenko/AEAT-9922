@@ -47,9 +47,11 @@ void setup() {
 //  aeat.init();
   aeat.setup_spi4(5,23,18,19,26);
   for (int i = 0; i <= 8; i++){
-    aeat.spi_write(8,i);
+    aeat.write_resolution(i);
     Serial.printf("Resolution: %d\n", i);
-    aeat.print_position();
+    aeat.print_register(0x3f);
+    aeat.print_register(8);
+    
   }
 //  aeat.print_registers();
   
