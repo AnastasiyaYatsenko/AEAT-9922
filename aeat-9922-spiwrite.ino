@@ -73,10 +73,10 @@ void loop() {
 //                 data, data, double(data)*360.0/262144.0, // результат вже приведено до 18-бітного числа
 //                 aeat.rdy,aeat.mhi,aeat.mlo,aeat.par,aeat.error_parity);
                  
-  aeat.init_pin_ssi();
-  data = aeat.ssi_read_pins(17);
-  Serial.printf("SSI PINS 0x%04lx=%6lld=%7.3Lf | rdy=%d mhi=%d mlo=%d par=%d err=%d \n",
-                 data, data, double(data)*360.0/262144.0, // результат вже приведено до 16-бітного числа
-                 aeat.rdy,aeat.mhi,aeat.mlo,aeat.par,aeat.error_parity);
+//  aeat.init_pin_ssi();
+//  data = aeat.ssi_read_pins(17);
+//  Serial.printf("SSI PINS 0x%04lx=%6lld=%7.3Lf | rdy=%d mhi=%d mlo=%d par=%d err=%d \n",
+//                 data, data, double(data)*360.0/262144.0, // результат вже приведено до 16-бітного числа
+//                 aeat.rdy,aeat.mhi,aeat.mlo,aeat.par,aeat.error_parity);
   delay(100);
 }

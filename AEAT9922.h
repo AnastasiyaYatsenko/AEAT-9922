@@ -122,6 +122,28 @@ public:
   AEAT9922();
   void init(){init_pin_ssi();};
 
+  void setup_spi4(){ return setup_spi4(M0, M1, M2, M3, MSEL); } // CS, MOSI, SCLK, MISO, MSEL
+  void setup_ssi3(){ return setup_ssi3(M0, M1, M2, M3, MSEL); } // ->1, NSL, SCLK, DO,   MSEL
+  void init_pin_ssi(){ return init_pin_ssi(M0, M1, M2, M3, MSEL); }
+  void setup_spi4(uint8_t CS_T, uint8_t MOSI_T, uint8_t SCLK_T, uint8_t MISO_T, uint8_t MSEL_T);
+  void setup_ssi3(uint8_t M0_T, uint8_t NSL_T,  uint8_t SCLK_T, uint8_t DO_T,   uint8_t MSEL_T);
+  void init_pin_ssi(uint8_t M0_T, uint8_t NSL_T,  uint8_t SCLK_T, uint8_t DO_T,   uint8_t MSEL_T);
+  
+  unsigned long int spi_read(unsigned int reg);
+  unsigned long int spi_write(unsigned int reg, unsigned int data);
+  unsigned long int ssi_read(unsigned int bits);
+  unsigned long int ssi_read(){ return ssi_read(18); };
+  unsigned long int ssi_read_pins(unsigned int bits);
+
+  void print_registers();
+  void print_register(unsigned int reg);
+
+  void write_hysteresis(uint8_t data);
+  void write_direction(uint8_t data);
+  void write_resolution(uint8_t data);
+
+private:
+
   uint8_t M0   = _M0;
   uint8_t M1   = _M1;
   uint8_t M2   = _M2;
@@ -170,31 +192,10 @@ M1         |  DIN  |  NSL  |   0   |  MOSI |  U  | n/a
 M2         |  SCLK |  SCLK |  SCLK |  SCLK |  V  | n/a 
 M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM 
 */
-  void setup_spi4(){ return setup_spi4(M0, M1, M2, M3, MSEL); } // CS, MOSI, SCLK, MISO, MSEL
-  void setup_ssi3(){ return setup_ssi3(M0, M1, M2, M3, MSEL); } // ->1, NSL, SCLK, DO,   MSEL
-  void setup_spi4(uint8_t CS_T, uint8_t MOSI_T, uint8_t SCLK_T, uint8_t MISO_T, uint8_t MSEL_T);
-  void setup_ssi3(uint8_t M0_T, uint8_t NSL_T,  uint8_t SCLK_T, uint8_t DO_T,   uint8_t MSEL_T);
+  
   unsigned int parity(unsigned int n);
   unsigned long int spi_transfer16(unsigned int reg, unsigned int RW);
   unsigned long int spi_transfer24(unsigned int reg, unsigned int RW);
-  unsigned long int spi_read(unsigned int reg);
-//  unsigned long int spi_read24(unsigned int reg);
-  unsigned long int spi_write(unsigned int reg, unsigned int data);
-  unsigned long int ssi_read(unsigned int bits);
-  unsigned long int ssi_read(){ return ssi_read(18); };
-  void print_registers();
-  void print_register(unsigned int reg);
 
-  void write_hysteresis(uint8_t data);
-  void write_direction(uint8_t data);
-  void write_resolution(uint8_t data);
-
-  
-
-  void init_pin_ssi(){ return init_pin_ssi(M0, M1, M2, M3, MSEL); }
-  void init_pin_ssi(uint8_t M0_T, uint8_t NSL_T,  uint8_t SCLK_T, uint8_t DO_T,   uint8_t MSEL_T);
-  unsigned long int ssi_read_pins(unsigned int bits);
-  
-//private:
 };
 #endif
