@@ -120,7 +120,6 @@ M3         |  DO   |  DO   |  DO   |  MISO |  W  | PWM
 class AEAT9922 {
 public:
   AEAT9922();
-  void init(){init_pin_ssi();};
 
   void setup_spi4(){ return setup_spi4(M0, M1, M2, M3, MSEL); } // CS, MOSI, SCLK, MISO, MSEL
   void setup_ssi3(){ return setup_ssi3(M0, M1, M2, M3, MSEL); } // ->1, NSL, SCLK, DO,   MSEL
@@ -131,9 +130,12 @@ public:
   
   unsigned long int spi_read(unsigned int reg);
   unsigned long int spi_write(unsigned int reg, unsigned int data);
-  unsigned long int ssi_read(unsigned int bits);
-  unsigned long int ssi_read(){ return ssi_read(18); };
+  unsigned long int ssi_read();
+//  unsigned long int ssi_read(){ return ssi_read(18); };
   unsigned long int ssi_read_pins(unsigned int bits);
+
+  unsigned int set_zero(); // returns 0 if OK
+  unsigned int reset_zero(); // returns 0 if OK
 
   void print_registers();
   void print_register(unsigned int reg);
@@ -141,6 +143,7 @@ public:
   void write_hysteresis(uint8_t data);
   void write_direction(uint8_t data);
   void write_resolution(uint8_t data);
+  unsigned int read_resolution();
 
 private:
 

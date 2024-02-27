@@ -3,16 +3,7 @@
 
 
 
-AEAT9922::AEAT9922(){
-//  mode = _AEAT_NONE;
-//  CS   = M0 = default_M0;
-//  MOSI = M1 = default_M1;
-//  SCLK = M2 = default_M2;
-//  MISO = M3 = default_M3;
-//  MSEL = default_MSEL;
-//  NSL  = default_M1;
-//  DO   = default_M3;
-}
+AEAT9922::AEAT9922(){}
 
 void AEAT9922::setup_ssi3(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t DO_T, uint8_t MSEL_T) {
   M0   = M0_T;
@@ -54,8 +45,9 @@ void AEAT9922::setup_ssi3(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t D
   mode = _AEAT_SSI3;
 }
 
-unsigned long int AEAT9922::ssi_read(unsigned int bits) {
+unsigned long int AEAT9922::ssi_read() {
 // у цьому режимі службові прапорці йдуть ЗА числом, тому для отримання коректних прапорців треба задавати реальну бітову точність 
+    unsigned int bits = 18; // SSI не дивиться на регістр 8! Він вичитує стільки значущих бітів, скільки ми замовляємо
     unsigned long long int res=0;
     uint32_t buffer=0;
     if (mode != _AEAT_SSI3) setup_ssi3();
@@ -69,8 +61,11 @@ unsigned long int AEAT9922::ssi_read(unsigned int bits) {
 //  виявилось, що esp32 може робити транзакції (кількість sclk) з довільним числом бітів <=32
     SPI.transferBits(0xffffff, &buffer, bits+4); // 18 бітів позиції+4 службових
 //    uint8_t bytes=(bits+4+7)/8; // у скільки байт буде запакований результат, 2 або 3
-    buffer = (msb<<24)|buffer;
+
+////    buffer = (msb<<24)|buffer;
+//    buffer = buffer>>2;
     raw_data = buffer >> (24-4-bits); // це така фіча - замовляємо 17..22 біти, а повертається число у 24х бітах, "знизу" доклеєне нулями. Їх потрібно відсікти
+////Serial.printf("RAW: msb=%d buffer=%06lx data=%06lx bits=%d shift=%d\n",msb,buffer,raw_data,bits,24-4-bits);
 //    unsigned int high = SPI.transfer(0xff); // стара версія з побайтовим вичитуванням
 //    unsigned int mid  = SPI.transfer(0xff);
 //    unsigned int low = 0;
@@ -89,10 +84,10 @@ unsigned long int AEAT9922::ssi_read(unsigned int bits) {
     rdy = (raw_data&8)>>3;
     res = raw_data>>4;
 // для зручності подальших розрахунків приводимо результат до 18-бітового числа, незалежно від реальної точності датчика
-    if (bits<17) // це все тому, що ми не можемо прочитати найстарший біт :(
-      res = res<<(17-bits);
-    else if (bits==18)
-      res = res>>1;
+////    if (bits<17) // це все тому, що ми не можемо прочитати найстарший біт :(
+////      res = res<<(17-bits);
+////    else if (bits==18)
+////      res = res>>1;
 //      res = msb<<17|res;
 //    if (bits<18) 
 //      res = res<<(18-bits);
@@ -211,6 +206,57 @@ unsigned long int AEAT9922::spi_write(unsigned int reg, unsigned int data) {
   return raw_data&0x3fff;
 }
 
+// прописує поточний кут до тіньових регістрів 0x0c..0x0e і зберігає їх до EEPROM
+unsigned int AEAT9922::set_zero() {
+  
+  spi_write(0x12, 0x00); // НЕДОКУМЕНТОВАНА фіча! Треба спочатку занулити регістр, а потім щось писати!
+  delay(50); // про всякий випадок
+  unsigned long int cde_prev = (spi_read(0x0c)&0xff)<<10 | (spi_read(0x0d)&0xff)<<2 | (spi_read(0x0e)&0xc0)>>6;
+  spi_write(0x12, 0x08);
+  delay(50); // Memory busy bit[8] address 0x22 will flag high for 40ms.
+  unsigned long int data = spi_read(0x22);
+  Serial.printf("Reg[0x22]=%02x\n",data);
+  data = (data>>2) & 0x03;
+  unsigned long int cde_new = (spi_read(0x0c)&0xff)<<10 | (spi_read(0x0d)&0xff)<<2 | (spi_read(0x0e)&0xc0)>>6;
+  if (data==2) {
+    if (cde_prev!=cde_new) { // Порівнюємо значення регістру Zero Reset перед та після виконанням запису до регістру 0x12, якщо не змінився - то failed
+      Serial.printf("Set zero is SUCCESSFULL\n");
+      return 0; // OK
+    } else {
+      Serial.printf("Register 0x22 returns OK, but set zero is FAILED\n");
+    }
+  } else if (data==3) {
+    Serial.printf("Set zero is FAILED\n");
+  } else {
+    Serial.printf("Set zero is STRANGE: %d\n",data);
+  }
+  return 1; // Not OK
+}
+
+unsigned int AEAT9922::reset_zero() {
+  spi_write(0x12, 0x00); // НЕДОКУМЕНТОВАНА фіча! Треба спочатку занулити регістр, а потім щось писати!
+  delay(50);
+  spi_write(0x12, 0x04);
+  delay(50); // Memory busy bit[8] address 0x22 will flag high for 40ms.
+  unsigned long int data = spi_read(0x22);
+  data = (data>>2) & 0x03;
+  unsigned long int cde = (spi_read(0x0c)&0xff)<<10 | (spi_read(0x0d)&0xff)<<2 | (spi_read(0x0e)&0xc0)>>6;
+  if (data==2) {
+    if (cde==0) {
+      Serial.printf("RESet zero is SUCCESSFULL\n");
+      return 0;
+    } else {
+      Serial.printf("Register 0x22 returns OK, but reset zero is FAILED\n");
+    }
+  } else if (data==3) {
+    Serial.printf("RESet zero is FAILED\n");
+  } else {
+    Serial.printf("RESet zero is STRANGE: %d\n",data);
+  }
+  return 1; // Not OK
+}
+
+
 void AEAT9922::write_hysteresis(uint8_t data) {
   reg8.bits = spi_read(8);
   reg8.hyst = data;
@@ -225,8 +271,15 @@ void AEAT9922::write_direction(uint8_t data) {
 
 void AEAT9922::write_resolution(uint8_t data) {
   reg8.bits = spi_read(8);
-  reg8.res = data;
-  spi_write(8, reg8.bits);
+  if (data<=18 && data>=10) {
+    reg8.res = 18-data; // значення роздільності наведено до бітової комбінація 0000..1000
+    spi_write(8, reg8.bits);
+  }
+}
+
+unsigned int AEAT9922::read_resolution() {
+  reg8.bits = spi_read(8);
+  return 18-reg8.res; // бітова комбінація 0000..1000 наведена до значення роздільності
 }
 
 void AEAT9922::print_register(unsigned int reg) {
@@ -256,9 +309,8 @@ void AEAT9922::print_register(unsigned int reg) {
     case 0x0c:
     case 0x0d:
     case 0x0e:
-      data = (spi_read(0x0c)&0x0000ff)<<10 | (spi_read(0x0d)&0x0000ff)<<2 | (spi_read(0x0e)&0x00000c)>>6;
-      Serial.printf("0x0C-0x0E:\n    [24:6] Single-Turn Zero Reset=0x%05lx\n",
-                            data&0x80?1:0, data&0x40?1:0,  data&0x20?1:0, data&0x10?1:0);
+      data = (spi_read(0x0c)&0xff)<<10 | (spi_read(0x0d)&0xff)<<2 | (spi_read(0x0e)&0xc0)>>6;
+      Serial.printf("0x0C-0x0E:\n    [24:6] Single-Turn Zero Reset=0x%05lx\n", data);
       break;
     case 0x21:
       data = spi_read(0x21);
@@ -291,9 +343,8 @@ void AEAT9922::print_registers() {
   Serial.printf("0x0B:\n    [6:5]  PSEL=%d%d\n    [4:0]  UWV/PWM=%02x\n",
                           data&0x40?1:0, data&0x20?1:0,  data&0x1f);
 
-  data = (spi_read(0x0c)&0x0000ff)<<10 | (spi_read(0x0d)&0x0000ff)<<2 | (spi_read(0x0e)&0x00000c)>>6;
-  Serial.printf("0x0C-0x0E:\n    [24:6] Single-Turn Zero Reset=0x%05lx\n",
-                          data&0x80?1:0, data&0x40?1:0,  data&0x20?1:0, data&0x10?1:0);
+  data = (spi_read(0x0c)&0xff)<<10 | (spi_read(0x0d)&0xff)<<2 | (spi_read(0x0e)&0xc0)>>6;
+  Serial.printf("0x0C-0x0E:\n    [24:6] Single-Turn Zero Reset=0x%05lx\n", data);
 
   data = spi_read(0x21);
   Serial.printf("0x21 Error bits register:\n    [7]    RDY=%d\n    [6]    MHI=%d\n    [5]    MLO=%d\n    [4]    MEM_Err=%d\n",
@@ -328,6 +379,8 @@ void AEAT9922::init_pin_ssi(uint8_t M0_T, uint8_t NSL_T, uint8_t SCLK_T, uint8_t
   digitalWrite(NSL, HIGH);
   digitalWrite(SCLK, HIGH);
   delayMicroseconds(1);
+
+  mode = _AEAT_SSI3;
 //  digitalWrite(PWRDOWN, LOW);
 }
 

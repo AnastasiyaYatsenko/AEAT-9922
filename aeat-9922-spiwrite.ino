@@ -42,41 +42,69 @@ void setup() {
   Serial.begin(BAUDRATE);
   Serial.println();
   Serial.println("Hello");
-  pinMode(4,  OUTPUT);
-  digitalWrite(4,  LOW);
-//  aeat.init();
+
+
+//  while (Serial.available() != 0) { Serial.read(); }
+
   aeat.setup_spi4(5,23,18,19,26);
-  for (int i = 0; i <= 8; i++){
+  unsigned long int data=0;
+  unsigned long int data1=0;
+  for (int i = 10; i <= 18; i++){
     aeat.write_resolution(i);
-    Serial.printf("Resolution: %d\n", i);
-    aeat.print_register(0x3f);
-    aeat.print_register(8);
-    
+    data = aeat.spi_read(0x3f);
+    data1 = aeat.ssi_read_pins(i);
+    Serial.printf("SPI=0x%05lx SSI=0x%05lx (resolution is %d)\n", data, data1, i);    
   }
-//  aeat.print_registers();
-  
-//  aeat.print_registers();
+  delay(5000);
 }
 
 void loop() {
-  return;
-  
-  unsigned long long int res=0;
   unsigned long long int data=0;
-//  data = aeat.read_enc(12);
-//  Serial.printf("SSI 0x%04lx=%6lld=%7.3Lf \n",
-//                 data, data, double(data)*360.0/65536.0);
-  
-//  aeat.setup_ssi3();
-//  data = aeat.ssi_read(17);
-//  Serial.printf("SSI HW   0x%04lx=%6lld=%7.3Lf | rdy=%d mhi=%d mlo=%d par=%d err=%d \n",
-//                 data, data, double(data)*360.0/262144.0, // результат вже приведено до 18-бітного числа
-//                 aeat.rdy,aeat.mhi,aeat.mlo,aeat.par,aeat.error_parity);
+
+  //SSI HW раптом почав вичитувати той найстарший біт, але ігнорує точність у регістрі 8
+  //Вичитує завжди 18 біт, але так як вся бітова математика поїхала, то можливо щось впускаю
+  aeat.setup_ssi3();
+  data = aeat.ssi_read();
+  Serial.printf("SSI HW   0x%04lx=%6lld=%7.3Lf \n",
+                 data, data, double(data)*360.0/262144.0); // результат вже приведено до 18-бітного числа
                  
-//  aeat.init_pin_ssi();
-//  data = aeat.ssi_read_pins(17);
-//  Serial.printf("SSI PINS 0x%04lx=%6lld=%7.3Lf | rdy=%d mhi=%d mlo=%d par=%d err=%d \n",
-//                 data, data, double(data)*360.0/262144.0, // результат вже приведено до 16-бітного числа
-//                 aeat.rdy,aeat.mhi,aeat.mlo,aeat.par,aeat.error_parity);
-  delay(100);
+  //SSI з ручним смиканням лапки наче працює нормально; параметром кількість бітів - вичитує стільки, скільки замовили
+  aeat.init_pin_ssi();
+  data = aeat.ssi_read_pins(17); //read 17 bits
+  Serial.printf("SSI PINS 0x%04lx=%6lld=%7.3Lf \n",
+                 data, data, double(data)*360.0/262144.0); // результат вже приведено до 18-бітного числа
+
+  data = aeat.spi_read(0x3f);
+  Serial.printf("SPI HW   0x%04lx=%6lld=%7.3Lf \n",
+                 data, data, double(data)*360.0/262144.0);
+  Serial.print("------------\n");
+
+  
+  // Example for testing set_zero and reset_zero
+  /*
+  for (int i=0; i<=10; i++){
+    delay(300);
+    data = aeat.spi_read(0x3f);
+    Serial.printf("SSI HW   0x%06x=%6d=%7.3Lf | rdy=%d mhi=%d mlo=%d par=%d err=%d \n",
+                 data, data, double(data)*360.0/262144.0, // результат вже приведено до 18-бітного числа
+                 aeat.rdy,aeat.mhi,aeat.mlo,aeat.par,aeat.error_parity);
+  }
+  
+  Serial.print("Введення: пусте - пропуск занулення, '0' - скинути до дефолтного нуля, '1' - зберегти поточну позицію\n");
+  while (Serial.available() == 0) {}    //wait for data available
+
+//  int r = Serial.read()-'0';
+  int r = Serial.read();
+  while (Serial.available() != 0) {Serial.read();}     //wait for data available
+  if (r==10) { // ''
+    Serial.printf("Skip zeroizing\n",r);
+  }
+  else if (r=='0') {
+    Serial.printf("Zeroizing registers\n",data);
+    aeat.reset_zero();
+  }
+  else {
+    aeat.set_zero();
+  }*/
+  delay(1000);
 }
